@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Flappy Bird Type Game</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #78c8ff;
+    touch-action: none;
+    font-family: Arial, sans-serif;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let W, H, scale;
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.floor(W * devicePixelRatio);
+  canvas.height = Math.floor(H * devicePixelRatio);
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+let bird, pipes, score, bestScore = Number(localStorage.getItem("flappyBest") || 0);
+let gameOver, started, pipeTimer, lastTime;
+
+function reset() {
+  bird = { x: W * 0.23, y: H * 0.5, r: 18, velocity: 0 };
+  pipes = [];
+  score = 0;
+  pipeTimer = 0;
+  gameOver = false;
+  started = false;
+}
+
+function flap() {
+  if (gameOver) {
+    reset();
+    started = true;
+  } else {
+    started = true;
+  }
+  bird.velocity = -8;
+}
+
+function addPipe() {
+  const gap = Math.max(135, Math.min(190, H * 0.29));
+  const margin = 90;
+  const gapY = margin + Math.random() * Math.max(40, H - margin * 2);
+  pipes.push({ x: W, gapY, gap, passed: false });
+}
+
+function circleRectCollision(cx, cy, r, rx, ry, rw, rh) {
+  const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+  const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nearestX, dy = cy - nearestY;
+  return dx * dx + dy * dy < r * r;
+}
+
+function update(dt) {
+  if (!started || gameOver) return;
+
+  const gravity = 0.45 * dt * 60;
+  bird.velocity += gravity;
+  bird.y += bird.velocity * dt * 60;
+
+  pipeTimer += dt * 60;
+  if (pipeTimer >= 95) {
+    addPipe();
+    pipeTimer = 0;
+  }
+
+  const speed = 4 * dt * 60;
+  for (const p of pipes) {
+    p.x -= speed;
+
+    const topH = p.gapY - p.gap / 2;
+    const bottomY = p.gapY + p.gap / 2;
+
+    if (
+      circleRectCollision(bird.x, bird.y, bird.r, p.x, 0, 80, topH) ||
+      circleRectCollision(bird.x, bird.y, bird.r, p.x, bottomY, 80, H - bottomY)
+    ) {
+      gameOver = true;
+    }
+
+    if (!p.passed && p.x + 80 < bird.x) {
+      p.passed = true;
+      score++;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem("flappyBest", bestScore);
+      }
+    }
+  }
+
+  pipes = pipes.filter(p => p.x > -100);
+
+  if (bird.y - bird.r <= 0 || bird.y + bird.r >= H) {
+    gameOver = true;
+  }
+}
+
+function drawPipe(p) {
+  const topH = p.gapY - p.gap / 2;
+  const bottomY = p.gapY + p.gap / 2;
+
+  ctx.fillStyle = "#46be50";
+  ctx.fillRect(p.x, 0, 80, topH);
+  ctx.fillRect(p.x, bottomY, 80, H - bottomY);
+
+  ctx.fillStyle = "#289632";
+  ctx.fillRect(p.x - 5, topH - 25, 90, 25);
+  ctx.fillRect(p.x - 5, bottomY, 90, 25);
+}
+
+function drawBird() {
+  ctx.fillStyle = "#ffdc3c";
+  ctx.beginPath();
+  ctx.arc(bird.x, bird.y, bird.r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#191919";
+  ctx.beginPath();
+  ctx.arc(bird.x + 7, bird.y - 6, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#f59628";
+  ctx.beginPath();
+  ctx.moveTo(bird.x + 15, bird.y);
+  ctx.lineTo(bird.x + 33, bird.y + 5);
+  ctx.lineTo(bird.x + 15, bird.y + 10);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function text(str, y, size = 40) {
+  ctx.fillStyle = "white";
+  ctx.font = `bold ${size}px Arial`;
+  ctx.textAlign = "center";
+  ctx.fillText(str, W / 2, y);
+}
+
+function draw() {
+  ctx.fillStyle = "#78c8ff";
+  ctx.fillRect(0, 0, W, H);
+
+  // Clouds
+  ctx.fillStyle = "white";
+  for (const [x, y, r] of [[W*.15,H*.17,25],[W*.19,H*.16,35],[W*.23,H*.18,25],
+                           [W*.77,H*.25,25],[W*.81,H*.24,35],[W*.85,H*.26,25]]) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  pipes.forEach(drawPipe);
+  drawBird();
+
+  text(String(score), 55, 48);
+
+  if (!started) {
+    text("FLAPPY BIRD", H * .40, Math.min(44, W / 9));
+    text("Tap, Space, W, or ↑ to flap", H * .49, 24);
+    text("Avoid the pipes", H * .55, 24);
+  }
+
+  if (gameOver) {
+    ctx.fillStyle = "rgba(0,0,0,.38)";
+    ctx.fillRect(0, 0, W, H);
+    text("GAME OVER", H * .40, 44);
+    text(`Score: ${score}`, H * .47, 27);
+    text(`Best: ${bestScore}`, H * .52, 27);
+    text("Tap to restart", H * .61, 25);
+  }
+}
+
+function loop(t) {
+  if (!lastTime) lastTime = t;
+  const dt = Math.min((t - lastTime) / 1000, 0.033);
+  lastTime = t;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+canvas.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  flap();
+});
+
+window.addEventListener("keydown", e => {
+  // Keyboard controls: Space, W, or Up Arrow = flap
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+    e.preventDefault();
+    flap();
+  }
+
+  // Escape = restart the page
+  if (e.code === "Escape") {
+    location.reload();
+  }
+});
+
+reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
